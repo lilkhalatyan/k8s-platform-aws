@@ -1,0 +1,95 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "title": "Request Rate (per second)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum by(endpoint) (rate(http_requests_total{namespace=\"microservices\"}[5m]))",
+          "legendFormat": "{{ endpoint }}"
+        }
+      ]
+    },
+    {
+      "title": "Request Latency (p95)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by(le, endpoint) (rate(http_request_duration_seconds_bucket{namespace=\"microservices\"}[5m])))",
+          "legendFormat": "p95 {{ endpoint }}"
+        }
+      ]
+    },
+    {
+      "title": "Error Rate (5xx)",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{namespace=\"microservices\", status=~\"5..\"}[5m])) / sum(rate(http_requests_total{namespace=\"microservices\"}[5m])) * 100",
+          "legendFormat": "Error %"
+        }
+      ]
+    },
+    {
+      "title": "Active Requests",
+      "type": "gauge",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(http_requests_active{namespace=\"microservices\"})",
+          "legendFormat": "Active"
+        }
+      ]
+    },
+    {
+      "title": "Orders Created (total)",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
+      "targets": [
+        {
+          "expr": "orders_created_total",
+          "legendFormat": "Total Orders"
+        }
+      ]
+    },
+    {
+      "title": "Notifications Sent by Type",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum by(type) (notifications_sent_total)",
+          "legendFormat": "{{ type }}"
+        }
+      ]
+    },
+    {
+      "title": "Request Latency Heatmap",
+      "type": "heatmap",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "targets": [
+        {
+          "expr": "sum by(le) (increase(http_request_duration_seconds_bucket{namespace=\"microservices\"}[5m]))",
+          "legendFormat": "{{ le }}"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 38,
+  "tags": ["microservices", "api"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "title": "Microservices Dashboard",
+  "uid": "microservices-dashboard"
+}

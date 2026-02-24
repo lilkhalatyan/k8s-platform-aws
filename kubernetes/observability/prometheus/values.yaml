@@ -1,0 +1,91 @@
+# kube-prometheus-stack Helm values
+# Chart: https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack
+
+prometheus:
+  prometheusSpec:
+    retention: 7d
+    resources:
+      requests:
+        cpu: 200m
+        memory: 512Mi
+      limits:
+        cpu: 500m
+        memory: 1Gi
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+
+  # Scrape our custom microservices
+  additionalServiceMonitors:
+    - name: microservices-monitor
+      selector:
+        matchLabels:
+          app: api-gateway
+      namespaceSelector:
+        matchNames:
+          - microservices
+      endpoints:
+        - port: "8000"
+          path: /metrics
+          interval: 15s
+    - name: order-service-monitor
+      selector:
+        matchLabels:
+          app: order-service
+      namespaceSelector:
+        matchNames:
+          - microservices
+      endpoints:
+        - port: "8001"
+          path: /metrics
+          interval: 15s
+    - name: notification-service-monitor
+      selector:
+        matchLabels:
+          app: notification-service
+      namespaceSelector:
+        matchNames:
+          - microservices
+      endpoints:
+        - port: "8002"
+          path: /metrics
+          interval: 15s
+
+grafana:
+  enabled: true
+  adminPassword: "admin"  # Change in production, use sealed secrets
+  service:
+    type: LoadBalancer
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: custom
+          orgId: 1
+          folder: "Custom"
+          type: file
+          disableDeletion: false
+          editable: true
+          options:
+            path: /var/lib/grafana/dashboards/custom
+  dashboards:
+    custom:
+      cluster-overview:
+        file: dashboards/cluster-overview.json
+      microservices:
+        file: dashboards/microservices.json
+  additionalDataSources:
+    - name: Loki
+      type: loki
+      url: http://loki.monitoring.svc.cluster.local:3100
+      access: proxy
+
+alertmanager:
+  enabled: true
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 100m
+        memory: 128Mi

@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: order-service-config
+  namespace: microservices
+data:
+  SERVICE_NAME: "order-service"
+  SERVICE_PORT: "8001"
