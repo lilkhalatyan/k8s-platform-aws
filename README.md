@@ -32,6 +32,44 @@ Production-grade Kubernetes platform on AWS EKS with GitOps (ArgoCD), full obser
 - **order-service** — CRUD operations for orders with in-memory store
 - **notification-service** — Manages notifications with in-memory store
 
+## Deployment Screenshots
+
+### EKS Cluster
+
+![EKS Cluster](docs/screenshots/eks-cluster-overview.png)
+
+EKS cluster running Kubernetes 1.29 with active status and managed add-ons.
+
+### EKS Add-ons
+
+![EKS Add-ons](docs/screenshots/eks-addons.png)
+
+Cluster add-ons: CoreDNS, kube-proxy, and Amazon VPC CNI — all active and managed by EKS.
+
+### ECR Repositories
+
+![ECR Repositories](docs/screenshots/ecr-repositories.png)
+
+Three private ECR repositories for the microservices: api-gateway, order-service, and notification-service.
+
+### VPC & Networking
+
+![VPC Subnets](docs/screenshots/vpc-subnets.png)
+
+6 subnets (3 public + 3 private) across 3 Availability Zones for high availability.
+
+### Grafana Monitoring
+
+![Grafana Dashboard](docs/screenshots/grafana-monitoring.png)
+
+Grafana dashboard showing real-time CPU and memory usage across all pods and nodes.
+
+### All Pods Healthy
+
+![Pods Healthy](docs/screenshots/pods-healthy.png)
+
+29 pods running across 4 namespaces with zero restarts — all services healthy.
+
 ## Prerequisites
 
 - AWS CLI configured with appropriate permissions
