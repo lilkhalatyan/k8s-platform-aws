@@ -1,230 +1,353 @@
 #!/usr/bin/env python3
-"""Generate architecture diagram for k8s-platform-aws."""
+"""Generate a polished architecture diagram for k8s-platform-aws."""
 
 from PIL import Image, ImageDraw, ImageFont
+import math
 import os
 
-WIDTH = 1400
-HEIGHT = 1000
-BG = "#0d1117"
-BORDER = "#30363d"
-TEXT = "#e6edf3"
+# Canvas
+W, H = 1600, 1050
+
+# Color palette (dark theme)
+BG       = "#0d1117"
+SURFACE  = "#161b22"
+BORDER   = "#30363d"
+TEXT_W   = "#e6edf3"
 TEXT_DIM = "#8b949e"
-BLUE = "#58a6ff"
-GREEN = "#3fb950"
-ORANGE = "#d29922"
-PURPLE = "#bc8cff"
-RED = "#f85149"
-TEAL = "#39d2c0"
-PINK = "#f778ba"
 
-def get_font(size):
-    try:
-        return ImageFont.truetype("arial.ttf", size)
-    except (OSError, IOError):
+# Accent colors
+AWS_ORG  = "#FF9900"
+K8S_BLUE = "#326CE5"
+ARGO_RED = "#EF7B4D"
+PROM_RED = "#E6522C"
+GRAF_ORG = "#F46800"
+LOKI_YEL = "#F2CC0C"
+GH_WHITE = "#ffffff"
+PY_BLUE  = "#3776AB"
+GREEN    = "#3fb950"
+TEAL     = "#56d4dd"
+PURPLE   = "#bc8cff"
+PINK     = "#f778ba"
+
+
+def font(size):
+    """Load Arial or fallback font."""
+    for name in ["arial.ttf", "arialbd.ttf", "C:/Windows/Fonts/arial.ttf"]:
         try:
-            return ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", size)
+            return ImageFont.truetype(name, size)
         except (OSError, IOError):
-            return ImageFont.load_default()
+            continue
+    return ImageFont.load_default()
 
-def rounded_rect(draw, xy, radius, fill, outline=None, width=1):
-    x1, y1, x2, y2 = xy
-    draw.rounded_rectangle(xy, radius=radius, fill=fill, outline=outline, width=width)
 
-def draw_box(draw, x, y, w, h, label, color, fill_alpha=None, sublabel=None, icon=None):
-    fill = color + "18"
-    rounded_rect(draw, (x, y, x+w, y+h), radius=8, fill=fill, outline=color, width=2)
-    font = get_font(14)
-    font_small = get_font(11)
-    if icon:
-        draw.text((x+10, y+8), icon, fill=color, font=get_font(16))
-        draw.text((x+30, y+10), label, fill=color, font=font)
-    else:
-        draw.text((x+10, y+10), label, fill=color, font=font)
-    if sublabel:
-        draw.text((x+10, y+28), sublabel, fill=TEXT_DIM, font=font_small)
+def font_bold(size):
+    for name in ["arialbd.ttf", "C:/Windows/Fonts/arialbd.ttf", "arial.ttf"]:
+        try:
+            return ImageFont.truetype(name, size)
+        except (OSError, IOError):
+            continue
+    return ImageFont.load_default()
 
-def draw_arrow(draw, x1, y1, x2, y2, color=TEXT_DIM, label=None, dashed=False):
-    draw.line([(x1, y1), (x2, y2)], fill=color, width=2)
-    # Arrowhead
-    import math
-    angle = math.atan2(y2-y1, x2-x1)
-    arrow_len = 10
-    ax1 = x2 - arrow_len * math.cos(angle - math.pi/6)
-    ay1 = y2 - arrow_len * math.sin(angle - math.pi/6)
-    ax2 = x2 - arrow_len * math.cos(angle + math.pi/6)
-    ay2 = y2 - arrow_len * math.sin(angle + math.pi/6)
+
+def rrect(draw, xy, r, fill=None, outline=None, width=1):
+    draw.rounded_rectangle(xy, radius=r, fill=fill, outline=outline, width=width)
+
+
+def hex_to_rgba(hex_color, alpha):
+    h = hex_color.lstrip("#")
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+    return (r, g, b, alpha)
+
+
+def draw_arrow(draw, pts, color=TEXT_DIM, width=2, arrow_size=9, dashed=False):
+    """Draw an arrow along a list of (x, y) points."""
+    # Draw line segments
+    for i in range(len(pts) - 1):
+        if dashed:
+            _draw_dashed_line(draw, pts[i], pts[i + 1], color, width)
+        else:
+            draw.line([pts[i], pts[i + 1]], fill=color, width=width)
+    # Arrowhead at last segment
+    x1, y1 = pts[-2]
+    x2, y2 = pts[-1]
+    angle = math.atan2(y2 - y1, x2 - x1)
+    ax1 = x2 - arrow_size * math.cos(angle - math.pi / 6)
+    ay1 = y2 - arrow_size * math.sin(angle - math.pi / 6)
+    ax2 = x2 - arrow_size * math.cos(angle + math.pi / 6)
+    ay2 = y2 - arrow_size * math.sin(angle + math.pi / 6)
     draw.polygon([(x2, y2), (int(ax1), int(ay1)), (int(ax2), int(ay2))], fill=color)
-    if label:
-        mx, my = (x1+x2)//2, (y1+y2)//2
-        font = get_font(10)
-        draw.text((mx+4, my-12), label, fill=TEXT_DIM, font=font)
+
+
+def _draw_dashed_line(draw, p1, p2, color, width, dash=10, gap=6):
+    x1, y1 = p1
+    x2, y2 = p2
+    dist = math.hypot(x2 - x1, y2 - y1)
+    if dist == 0:
+        return
+    dx, dy = (x2 - x1) / dist, (y2 - y1) / dist
+    pos = 0
+    while pos < dist:
+        end = min(pos + dash, dist)
+        draw.line(
+            [(x1 + dx * pos, y1 + dy * pos), (x1 + dx * end, y1 + dy * end)],
+            fill=color, width=width,
+        )
+        pos = end + gap
+
+
+def arrow_label(draw, x, y, text, color=TEXT_DIM):
+    draw.text((x, y), text, fill=color, font=font(10))
+
+
+def node(draw, x, y, w, h, title, subtitle, color, icon_text=None):
+    """Draw a component node box."""
+    rrect(draw, (x, y, x + w, y + h), r=6, fill=SURFACE, outline=color, width=2)
+    # Color accent bar on top
+    rrect(draw, (x + 1, y + 1, x + w - 1, y + 5), r=3, fill=color)
+    ty = y + 12
+    if icon_text:
+        draw.text((x + 10, ty), icon_text, fill=color, font=font_bold(13))
+        draw.text((x + 28, ty), title, fill=TEXT_W, font=font_bold(13))
+    else:
+        draw.text((x + 10, ty), title, fill=TEXT_W, font=font_bold(13))
+    if subtitle:
+        draw.text((x + 10, ty + 18), subtitle, fill=TEXT_DIM, font=font(10))
+
+
+def section_box(draw, x, y, w, h, label, color, dashed=False):
+    """Draw a labeled section outline."""
+    rrect(draw, (x, y, x + w, y + h), r=10, fill=None, outline=color, width=2 if not dashed else 1)
+    # Label background
+    tw = len(label) * 8 + 16
+    rrect(draw, (x + 12, y - 10, x + 12 + tw, y + 12), r=4, fill=BG)
+    draw.text((x + 20, y - 8), label, fill=color, font=font_bold(12))
+
 
 def main():
-    img = Image.new("RGB", (WIDTH, HEIGHT), BG)
-    draw = ImageDraw.Draw(img)
+    img = Image.new("RGB", (W, H), BG)
+    draw = ImageDraw.Draw(img, "RGBA")
 
-    title_font = get_font(24)
-    subtitle_font = get_font(13)
-    section_font = get_font(16)
-    label_font = get_font(12)
-    small_font = get_font(10)
+    # ═══════════════════════════════════════════════
+    # TITLE
+    # ═══════════════════════════════════════════════
+    draw.text((W // 2 - 250, 16), "K8s Platform AWS", fill=TEXT_W, font=font_bold(28))
+    draw.text((W // 2 + 30, 24), "Architecture Overview", fill=TEXT_DIM, font=font(18))
+    draw.line([(50, 55), (W - 50, 55)], fill=BORDER, width=1)
 
-    # Title
-    draw.text((WIDTH//2 - 200, 15), "K8s Platform AWS - Architecture", fill=TEXT, font=title_font)
-    draw.text((WIDTH//2 - 180, 48), "EKS + ArgoCD + Prometheus + Grafana + Loki", fill=TEXT_DIM, font=subtitle_font)
+    # ═══════════════════════════════════════════════
+    # USER / CLIENT
+    # ═══════════════════════════════════════════════
+    node(draw, 60, 75, 130, 50, "User / Client", "HTTPS", TEXT_DIM)
 
-    # ── GitHub Section (top) ──
-    gh_y = 80
-    rounded_rect(draw, (50, gh_y, 1350, gh_y+120), radius=10, fill="#161b2233", outline=BORDER, width=2)
-    draw.text((60, gh_y+5), "GitHub", fill=TEXT, font=section_font)
+    # ═══════════════════════════════════════════════
+    # GITHUB SECTION
+    # ═══════════════════════════════════════════════
+    section_box(draw, 260, 65, 520, 70, "GitHub", GH_WHITE)
+    node(draw, 275, 80, 140, 42, "Repository", "main branch", PURPLE)
+    node(draw, 430, 80, 110, 42, "CI Pipeline", "test + lint", GREEN)
+    node(draw, 555, 80, 110, 42, "Build & Push", "Docker > ECR", AWS_ORG)
+    node(draw, 680, 80, 85, 42, "TF CI/CD", "plan/apply", PURPLE)
 
-    # Repo box
-    draw_box(draw, 70, gh_y+30, 200, 75, "Git Repository", BLUE, sublabel="apps/ terraform/ kubernetes/")
+    # Arrows repo -> CI, Build, TF
+    draw_arrow(draw, [(415, 101), (430, 101)], GREEN, width=1)
+    draw_arrow(draw, [(415, 101), (555, 101)], AWS_ORG, width=1)
+    draw_arrow(draw, [(415, 101), (680, 101)], PURPLE, width=1)
 
-    # CI workflows
-    draw_box(draw, 320, gh_y+30, 180, 35, "CI Pipeline", GREEN, sublabel=None)
-    draw.text((330, gh_y+48), "pytest, black, tflint", fill=TEXT_DIM, font=small_font)
+    # ═══════════════════════════════════════════════
+    # AWS CLOUD
+    # ═══════════════════════════════════════════════
+    section_box(draw, 50, 155, W - 100, 870, "AWS Cloud  (us-east-1)", AWS_ORG)
 
-    draw_box(draw, 520, gh_y+30, 180, 35, "Build & Push", ORANGE, sublabel=None)
-    draw.text((530, gh_y+48), "Docker build → ECR", fill=TEXT_DIM, font=small_font)
+    # ECR + Terraform State (top-right of AWS)
+    node(draw, 830, 172, 150, 45, "ECR", "3 repos, scan on push", AWS_ORG)
+    node(draw, 1010, 172, 150, 45, "S3 + DynamoDB", "Terraform state + lock", AWS_ORG)
 
-    draw_box(draw, 720, gh_y+30, 180, 35, "Terraform CI/CD", PURPLE, sublabel=None)
-    draw.text((730, gh_y+48), "Plan on PR, Apply on merge", fill=TEXT_DIM, font=small_font)
+    # ═══════════════════════════════════════════════
+    # VPC
+    # ═══════════════════════════════════════════════
+    section_box(draw, 70, 240, W - 140, 770, "VPC  10.0.0.0/16", K8S_BLUE)
 
-    # ArgoCD sync label
-    draw_box(draw, 950, gh_y+30, 180, 35, "ArgoCD Sync", RED, sublabel=None)
-    draw.text((960, gh_y+48), "GitOps auto-sync", fill=TEXT_DIM, font=small_font)
+    # ── Public Subnets ──
+    section_box(draw, 90, 270, 230, 150, "Public Subnets (3 AZs)", K8S_BLUE, dashed=True)
+    node(draw, 105, 290, 195, 50, "Application LB", "internet-facing, ALB class", K8S_BLUE)
+    node(draw, 105, 350, 195, 50, "NAT Gateway", "single (cost optimized)", K8S_BLUE)
 
-    # Arrows from repo to workflows
-    draw_arrow(draw, 270, gh_y+65, 320, gh_y+48, GREEN, "PR")
-    draw_arrow(draw, 270, gh_y+65, 520, gh_y+48, ORANGE, "merge")
-    draw_arrow(draw, 270, gh_y+65, 720, gh_y+48, PURPLE)
+    # ═══════════════════════════════════════════════
+    # EKS CLUSTER
+    # ═══════════════════════════════════════════════
+    section_box(draw, 340, 270, W - 410, 725, "EKS Cluster  v1.29   |   SPOT t3.medium x2   |   IRSA enabled", TEAL)
 
-    # ── AWS Cloud Section ──
-    aws_y = 220
-    rounded_rect(draw, (50, aws_y, 1350, 970), radius=10, fill="#161b2211", outline="#f0883e", width=2)
-    draw.text((60, aws_y+5), "AWS Cloud", fill="#f0883e", font=section_font)
+    # ── namespace: microservices ──
+    section_box(draw, 365, 305, 450, 310, "namespace: microservices", GREEN)
 
-    # ECR
-    draw_box(draw, 70, aws_y+35, 160, 50, "ECR", ORANGE, sublabel="Docker images")
+    svc_x = 385
+    svc_y = 330
 
-    # ── VPC Section ──
-    vpc_y = aws_y + 100
-    rounded_rect(draw, (70, vpc_y, 1330, 950), radius=10, fill="#1c2333", outline=BLUE, width=2)
-    draw.text((80, vpc_y+5), "VPC  10.0.0.0/16", fill=BLUE, font=section_font)
+    node(draw, svc_x, svc_y, 195, 55, "API Gateway", "FastAPI :8000  /metrics", PY_BLUE, icon_text="")
+    node(draw, svc_x + 220, svc_y, 175, 55, "Order Service", "FastAPI :8001  /metrics", PY_BLUE, icon_text="")
+    node(draw, svc_x, svc_y + 75, 195, 55, "Notification Svc", "FastAPI :8002  /metrics", PY_BLUE, icon_text="")
 
-    # Public Subnets
-    pub_y = vpc_y + 35
-    rounded_rect(draw, (90, pub_y, 500, pub_y+100), radius=8, fill="#0d2137", outline="#1f6feb", width=1)
-    draw.text((100, pub_y+5), "Public Subnets (3 AZs)", fill="#1f6feb", font=label_font)
-    draw_box(draw, 110, pub_y+28, 160, 55, "ALB", BLUE, sublabel="Ingress Controller")
-    draw_box(draw, 290, pub_y+28, 160, 55, "NAT Gateway", BLUE, sublabel="Single (cost opt.)")
+    # HPA / probe info box
+    rrect(draw, (svc_x + 220, svc_y + 75, svc_x + 420, svc_y + 145), r=6, fill=SURFACE, outline=BORDER, width=1)
+    draw.text((svc_x + 230, svc_y + 80), "HPA: 2-5 replicas @ 70% CPU", fill=GREEN, font=font(10))
+    draw.text((svc_x + 230, svc_y + 95), "Liveness + Readiness probes", fill=TEXT_DIM, font=font(10))
+    draw.text((svc_x + 230, svc_y + 110), "Resource requests & limits", fill=TEXT_DIM, font=font(10))
+    draw.text((svc_x + 230, svc_y + 125), "ConfigMap env injection", fill=TEXT_DIM, font=font(10))
 
-    # Private Subnets
-    priv_y = vpc_y + 35
-    rounded_rect(draw, (520, priv_y, 1310, priv_y+590), radius=8, fill="#0d2117", outline="#238636", width=1)
-    draw.text((530, priv_y+5), "Private Subnets (3 AZs)", fill="#238636", font=label_font)
+    # Inter-service arrows
+    draw_arrow(draw, [(svc_x + 195, svc_y + 28), (svc_x + 220, svc_y + 28)], GREEN, width=1)
+    draw_arrow(draw, [(svc_x + 97, svc_y + 55), (svc_x + 97, svc_y + 75)], GREEN, width=1)
 
-    # ── EKS Cluster ──
-    eks_y = priv_y + 30
-    rounded_rect(draw, (540, eks_y, 1290, eks_y+545), radius=8, fill="#161b22", outline=TEAL, width=2)
-    draw.text((555, eks_y+5), "EKS Cluster (v1.29)  —  Spot Instances (t3.medium x2)", fill=TEAL, font=section_font)
+    # Ingress
+    node(draw, 365, 530, 200, 50, "Ingress (ALB Class)", "path: / -> api-gateway:80", K8S_BLUE)
 
-    # ── Microservices namespace ──
-    ms_y = eks_y + 35
-    rounded_rect(draw, (560, ms_y, 900, ms_y+200), radius=8, fill="#1a1520", outline=PURPLE, width=1)
-    draw.text((570, ms_y+5), "namespace: microservices", fill=PURPLE, font=label_font)
+    # ── namespace: monitoring ──
+    section_box(draw, 840, 305, 440, 310, "namespace: monitoring", PROM_RED)
 
-    # Services
-    svc_w, svc_h = 150, 80
-    svc_y = ms_y + 28
+    obs_x = 865
+    obs_y = 330
 
-    draw_box(draw, 575, svc_y, svc_w, svc_h, "api-gateway", GREEN, sublabel="FastAPI :8000\n/health /metrics")
-    draw_box(draw, 740, svc_y, svc_w, svc_h, "order-service", GREEN, sublabel="FastAPI :8001\n/health /metrics")
+    node(draw, obs_x, obs_y, 185, 55, "Prometheus", "kube-prometheus-stack", PROM_RED)
+    node(draw, obs_x + 210, obs_y, 185, 55, "Grafana", "Dashboards + alerts", GRAF_ORG)
+    node(draw, obs_x, obs_y + 75, 185, 55, "Loki", "Log aggregation (7d)", LOKI_YEL)
+    node(draw, obs_x + 210, obs_y + 75, 185, 55, "Promtail", "DaemonSet log shipper", PINK)
 
-    draw_box(draw, 575, svc_y+90, svc_w, svc_h, "notification-svc", GREEN, sublabel="FastAPI :8002\n/health /metrics")
+    # Dashboard info
+    rrect(draw, (obs_x, obs_y + 150, obs_x + 400, obs_y + 215), r=6, fill=SURFACE, outline=BORDER, width=1)
+    draw.text((obs_x + 10, obs_y + 155), "Custom Grafana Dashboards:", fill=GRAF_ORG, font=font_bold(11))
+    draw.text((obs_x + 10, obs_y + 172), "Cluster Overview  -  CPU, memory, pod count, disk, network", fill=TEXT_DIM, font=font(10))
+    draw.text((obs_x + 10, obs_y + 187), "Microservices  -  request rate, latency p95, error rate, orders", fill=TEXT_DIM, font=font(10))
 
-    # HPA labels
-    draw.text((740, svc_y+90+5), "HPA: 2-5 replicas", fill=TEXT_DIM, font=small_font)
-    draw.text((740, svc_y+90+20), "CPU target: 70%", fill=TEXT_DIM, font=small_font)
-    draw.text((740, svc_y+90+35), "Liveness + Readiness", fill=TEXT_DIM, font=small_font)
-    draw.text((740, svc_y+90+50), "Resource limits set", fill=TEXT_DIM, font=small_font)
+    # Monitoring arrows
+    draw_arrow(draw, [(obs_x + 185, obs_y + 28), (obs_x + 210, obs_y + 28)], GRAF_ORG, width=1)  # prom -> grafana
+    draw_arrow(draw, [(obs_x + 185, obs_y + 103), (obs_x + 210, obs_y + 103)], PINK, width=1)  # loki -> promtail (reversed visually)
+    draw_arrow(draw, [(obs_x + 92, obs_y + 55), (obs_x + 92, obs_y + 75)], LOKI_YEL, width=1)  # visual link
 
-    # ── Monitoring namespace ──
-    mon_y = eks_y + 35
-    rounded_rect(draw, (920, mon_y, 1270, mon_y+200), radius=8, fill="#1a1a10", outline=ORANGE, width=1)
-    draw.text((930, mon_y+5), "namespace: monitoring", fill=ORANGE, font=label_font)
+    # Loki -> Grafana
+    draw_arrow(draw, [(obs_x + 92, obs_y + 55), (obs_x + 302, obs_y + 55)], GRAF_ORG, width=1, dashed=True)
 
-    obs_y = mon_y + 28
-    draw_box(draw, 935, obs_y, 140, 50, "Prometheus", RED, sublabel="Metrics (7d ret.)")
-    draw_box(draw, 1095, obs_y, 140, 50, "Grafana", ORANGE, sublabel="Dashboards")
+    # ── namespace: argocd ──
+    section_box(draw, 365, 650, 450, 105, "namespace: argocd", ARGO_RED)
 
-    draw_box(draw, 935, obs_y+60, 140, 50, "Loki", PINK, sublabel="Log aggregation")
-    draw_box(draw, 1095, obs_y+60, 140, 50, "Promtail", PINK, sublabel="Log collector")
+    node(draw, 385, 675, 200, 55, "ArgoCD Server", "App-of-Apps pattern", ARGO_RED)
 
-    # Custom dashboards label
-    draw.text((1095, obs_y+120), "Custom Dashboards:", fill=TEXT_DIM, font=small_font)
-    draw.text((1095, obs_y+135), "- Cluster Overview", fill=TEXT_DIM, font=small_font)
-    draw.text((1095, obs_y+150), "- Microservices Metrics", fill=TEXT_DIM, font=small_font)
+    # ArgoCD details
+    rrect(draw, (600, 675, 795, 730), r=6, fill=SURFACE, outline=BORDER, width=1)
+    draw.text((610, 680), "Projects:", fill=ARGO_RED, font=font_bold(11))
+    draw.text((610, 695), "microservices  (3 apps, auto-sync)", fill=TEXT_DIM, font=font(10))
+    draw.text((610, 710), "observability  (prometheus + loki)", fill=TEXT_DIM, font=font(10))
 
-    # ── ArgoCD namespace ──
-    argo_y = eks_y + 260
-    rounded_rect(draw, (560, argo_y, 900, argo_y+100), radius=8, fill="#1a1015", outline=RED, width=1)
-    draw.text((570, argo_y+5), "namespace: argocd", fill=RED, font=label_font)
+    # ── namespace: kube-system ──
+    section_box(draw, 840, 640, 440, 105, "namespace: kube-system", TEXT_DIM)
+    node(draw, 865, 665, 130, 55, "CoreDNS", "Service discovery", TEXT_DIM)
+    node(draw, 1010, 665, 130, 55, "kube-proxy", "Network proxy", TEXT_DIM)
+    node(draw, 1155, 665, 105, 55, "VPC CNI", "Pod networking", TEXT_DIM)
 
-    draw_box(draw, 575, argo_y+28, 180, 55, "ArgoCD Server", RED, sublabel="App-of-Apps pattern")
-    draw.text((775, argo_y+33), "Projects:", fill=TEXT_DIM, font=small_font)
-    draw.text((775, argo_y+48), "- microservices (3 apps)", fill=TEXT_DIM, font=small_font)
-    draw.text((775, argo_y+63), "- observability (prom + loki)", fill=TEXT_DIM, font=small_font)
+    # ── Terraform provisioned label ──
+    rrect(draw, (365, 770, 820, 820), r=6, fill=SURFACE, outline=PURPLE, width=1)
+    draw.text((380, 775), "Provisioned by Terraform:", fill=PURPLE, font=font_bold(12))
+    draw.text((380, 793), "VPC (3 AZ)  +  EKS Cluster  +  3 ECR Repos  +  ArgoCD (Helm)  +  IAM/OIDC  +  Addons", fill=TEXT_DIM, font=font(10))
 
-    # ── kube-system ──
-    ks_y = eks_y + 260
-    rounded_rect(draw, (920, ks_y, 1270, ks_y+100), radius=8, fill="#111518", outline=TEXT_DIM, width=1)
-    draw.text((930, ks_y+5), "namespace: kube-system", fill=TEXT_DIM, font=label_font)
-    draw.text((940, ks_y+28), "CoreDNS", fill=TEXT_DIM, font=small_font)
-    draw.text((940, ks_y+43), "kube-proxy", fill=TEXT_DIM, font=small_font)
-    draw.text((940, ks_y+58), "vpc-cni", fill=TEXT_DIM, font=small_font)
-    draw.text((940, ks_y+73), "AWS ALB Ingress Controller", fill=TEXT_DIM, font=small_font)
+    # ── CI/CD Flow label ──
+    rrect(draw, (860, 770, 1260, 820), r=6, fill=SURFACE, outline=GREEN, width=1)
+    draw.text((875, 775), "CI/CD Flow (GitHub Actions):", fill=GREEN, font=font_bold(12))
+    draw.text((875, 793), "PR: lint+test+plan  |  Merge: build+push ECR, tf apply, ArgoCD sync", fill=TEXT_DIM, font=font(10))
 
-    # ── IRSA label ──
-    draw.text((560, eks_y + 385), "IRSA enabled  |  Cluster logging: api, audit, authenticator", fill=TEAL, font=small_font)
+    # ═══════════════════════════════════════════════
+    # FLOW ARROWS (main connections)
+    # ═══════════════════════════════════════════════
 
-    # ── Arrows ──
-    # ALB → api-gateway
-    draw_arrow(draw, 270, pub_y+55, 575, svc_y+40, BLUE, "traffic")
+    # User -> ALB
+    draw_arrow(draw, [(190, 100), (230, 100), (230, 315), (300, 315)], K8S_BLUE, width=2)
+    arrow_label(draw, 195, 82, "HTTPS", K8S_BLUE)
 
-    # ArgoCD ← GitHub (GitOps sync)
-    draw_arrow(draw, 1040, gh_y+65, 665, argo_y, RED, "auto-sync")
+    # ALB -> Ingress
+    draw_arrow(draw, [(300, 315), (365, 555)], K8S_BLUE, width=2)
 
-    # Prometheus scrapes microservices
-    draw_arrow(draw, 935, obs_y+25, 900, svc_y+40, RED, "/metrics")
+    # Ingress -> API Gateway
+    draw_arrow(draw, [(475, 530), (475, svc_y + 55)], K8S_BLUE, width=2)
+    arrow_label(draw, 480, 495, "route /", K8S_BLUE)
 
-    # Promtail → Loki
-    draw_arrow(draw, 1095, obs_y+85, 1075, obs_y+85, PINK)
+    # GitHub -> ArgoCD (GitOps)
+    draw_arrow(draw, [(330, 135), (330, 675), (385, 700)], ARGO_RED, width=2, dashed=True)
+    arrow_label(draw, 255, 430, "GitOps sync", ARGO_RED)
 
-    # api-gateway → order & notification
-    draw_arrow(draw, 725, svc_y+40, 740, svc_y+40, GREEN)
-    draw_arrow(draw, 650, svc_y+80, 650, svc_y+90, GREEN)
+    # ArgoCD -> microservices namespace
+    draw_arrow(draw, [(485, 650), (485, 615)], ARGO_RED, width=1, dashed=True)
+    arrow_label(draw, 492, 622, "deploy", ARGO_RED)
 
-    # ECR → EKS
-    draw_arrow(draw, 230, aws_y+60, 540, eks_y+10, ORANGE, "pull images")
+    # ECR -> EKS (pull images)
+    draw_arrow(draw, [(905, 217), (905, 270)], AWS_ORG, width=2, dashed=True)
+    arrow_label(draw, 915, 230, "pull images", AWS_ORG)
 
-    # ── Legend ──
-    leg_y = 895
-    rounded_rect(draw, (90, leg_y, 500, leg_y+45), radius=6, fill="#161b22", outline=BORDER, width=1)
-    draw.text((100, leg_y+5), "Terraform", fill=PURPLE, font=small_font)
-    draw.text((170, leg_y+5), "GitHub Actions", fill=GREEN, font=small_font)
-    draw.text((270, leg_y+5), "ArgoCD GitOps", fill=RED, font=small_font)
-    draw.text((370, leg_y+5), "Prometheus", fill=ORANGE, font=small_font)
-    draw.text((100, leg_y+22), "Python FastAPI", fill=GREEN, font=small_font)
-    draw.text((210, leg_y+22), "Loki + Promtail", fill=PINK, font=small_font)
-    draw.text((330, leg_y+22), "Helm Charts", fill=TEAL, font=small_font)
+    # Build & Push -> ECR
+    draw_arrow(draw, [(610, 122), (610, 150), (830, 150), (830, 172)], AWS_ORG, width=1, dashed=True)
+    arrow_label(draw, 690, 133, "push images", AWS_ORG)
 
-    # Save
+    # Microservices -> Prometheus (metrics scrape)
+    draw_arrow(draw, [(815, svc_y + 28), (865, obs_y + 28)], PROM_RED, width=2, dashed=True)
+    arrow_label(draw, 820, svc_y + 12, "/metrics", PROM_RED)
+
+    # Promtail -> microservices (log collection)
+    draw_arrow(draw, [(obs_x + 302, obs_y + 130), (obs_x + 415, obs_y + 130), (obs_x + 415, obs_y + 230),
+                       (815, obs_y + 230), (815, svc_y + 55 + 75)], PINK, width=1, dashed=True)
+    arrow_label(draw, 825, obs_y + 218, "collect logs", PINK)
+
+    # ═══════════════════════════════════════════════
+    # LEGEND
+    # ═══════════════════════════════════════════════
+    leg_y = 855
+    section_box(draw, 70, leg_y, W - 140, 150, "Technology Stack", BORDER)
+
+    col1, col2, col3, col4 = 100, 420, 740, 1100
+    row1, row2, row3, row4 = leg_y + 20, leg_y + 48, leg_y + 76, leg_y + 104
+
+    def legend_item(x, y, color, label, detail):
+        rrect(draw, (x, y + 2, x + 10, y + 12), r=2, fill=color)
+        draw.text((x + 16, y), label, fill=TEXT_W, font=font_bold(11))
+        draw.text((x + 16, y + 15), detail, fill=TEXT_DIM, font=font(9))
+
+    legend_item(col1, row1, K8S_BLUE, "Amazon EKS", "Managed Kubernetes (v1.29)")
+    legend_item(col1, row2, AWS_ORG, "AWS Services", "VPC, ALB, ECR, NAT, S3, DynamoDB")
+    legend_item(col1, row3, PURPLE, "Terraform", "IaC - modular architecture")
+    legend_item(col1, row4, GREEN, "GitHub Actions", "3 workflows: CI, build, deploy")
+
+    legend_item(col2, row1, ARGO_RED, "ArgoCD", "GitOps - app-of-apps pattern")
+    legend_item(col2, row2, PROM_RED, "Prometheus", "Metrics collection (7d retention)")
+    legend_item(col2, row3, GRAF_ORG, "Grafana", "Dashboards + visualization")
+    legend_item(col2, row4, LOKI_YEL, "Loki + Promtail", "Centralized log aggregation")
+
+    legend_item(col3, row1, PY_BLUE, "Python FastAPI", "3 microservices with /metrics")
+    legend_item(col3, row2, TEAL, "EKS Addons", "CoreDNS, kube-proxy, VPC CNI")
+    legend_item(col3, row3, PINK, "Log Pipeline", "Promtail DaemonSet -> Loki")
+    legend_item(col3, row4, TEXT_DIM, "Helm Charts", "ArgoCD, kube-prometheus, loki-stack")
+
+    # Key stats
+    rrect(draw, (col4, row1, col4 + 370, row4 + 25), r=6, fill=SURFACE, outline=TEAL, width=1)
+    draw.text((col4 + 10, row1 + 5), "Key Highlights", fill=TEAL, font=font_bold(12))
+    stats = [
+        "SPOT instances  ~60% cost savings",
+        "Single NAT GW   saves ~$65/mo",
+        "HPA auto-scaling  2-5 replicas",
+        "IRSA  fine-grained pod IAM",
+        "Full GitOps  auto-sync + self-heal",
+        "3 pillars  metrics, logs, dashboards",
+    ]
+    for i, s in enumerate(stats):
+        parts = s.split("  ", 1)
+        draw.text((col4 + 15, row1 + 24 + i * 15), parts[0], fill=TEXT_W, font=font_bold(10))
+        if len(parts) > 1:
+            draw.text((col4 + 15 + len(parts[0]) * 7, row1 + 24 + i * 15), parts[1], fill=TEXT_DIM, font=font(10))
+
+    # ═══════════════════════════════════════════════
+    # SAVE
+    # ═══════════════════════════════════════════════
     output = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "docs", "architecture-diagram.png")
-    img.save(output, "PNG", quality=95)
-    print(f"Saved to {output}")
+    os.makedirs(os.path.dirname(output), exist_ok=True)
+    img.save(output, "PNG")
+    print(f"Saved: {output}")
+    print(f"Size: {W}x{H}")
+
 
 if __name__ == "__main__":
     main()
